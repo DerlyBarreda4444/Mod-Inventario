@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>📦 PaperStock – Control de Inventario</title>
+
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+
+    <style>
+        :root {
+            --azul: #1a56db;
+            --verde: #057a55;
+            --rojo: #c81e1e;
+            --alerta: #e3a008;
+        }
+
+        body {
+            background-color: #f3f4f6;
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        /* ── Navbar ─────────────────────────────────────────────────── */
+        .navbar-brand span { color: #fbbf24; font-weight: 700; }
+
+        /* ── Tarjetas de resumen ─────────────────────────────────────── */
+        .stat-card {
+            border: none;
+            border-radius: 12px;
+            transition: transform .2s;
+        }
+        .stat-card:hover { transform: translateY(-3px); }
+
+        /* ── Tabla ───────────────────────────────────────────────────── */
+        .table-container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 1px 4px rgba(0,0,0,.08);
+            overflow: hidden;
+        }
+        #tablaProductos th { background-color: #1e3a5f; color: white; white-space: nowrap; }
+        .badge-alerta { background-color: var(--alerta); color: #1a1a1a; }
+
+        /* ── Modal ───────────────────────────────────────────────────── */
+        .modal-header { background-color: #1e3a5f; color: white; }
+        .modal-header .btn-close { filter: invert(1); }
+
+        /* ── Indicador de carga ──────────────────────────────────────── */
+        #loadingSpinner { display: none; }
+    </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     NAVBAR
+════════════════════════════════════════════════════════════════════════════ -->
+<nav class="navbar navbar-dark" style="background-color: #1e3a5f;">
+    <div class="container-fluid">
+        <span class="navbar-brand fs-4">
+            <i class="bi bi-box-seam-fill me-2"></i>Paper<span>Stock</span>
+        </span>
+        <span class="text-white-50 small" id="fechaHora"></span>
+    </div>
+</nav>
+
+<div class="container-fluid p-4">
+
+    <!-- ══ TARJETAS DE RESUMEN ════════════════════════════════════════════════ -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="card stat-card bg-primary text-white p-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="small opacity-75">Total Productos</div>
+                        <div class="fs-3 fw-bold" id="statTotal">–</div>
+                    </div>
+                    <i class="bi bi-box-seam fs-2 opacity-50"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card stat-card text-white p-3" style="background-color: var(--alerta);">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="small opacity-75">En Alerta</div>
+                        <div class="fs-3 fw-bold" id="statAlertas">–</div>
+                    </div>
+                    <i class="bi bi-exclamation-triangle-fill fs-2 opacity-50"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card stat-card bg-success text-white p-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="small opacity-75">Sucursales</div>
+                        <div class="fs-3 fw-bold" id="statSucursales">–</div>
+                    </div>
+                    <i class="bi bi-geo-alt-fill fs-2 opacity-50"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card stat-card bg-info text-white p-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="small opacity-75">Categorías</div>
+                        <div class="fs-3 fw-bold" id="statCategorias">–</div>
+                    </div>
+                    <i class="bi bi-tags-fill fs-2 opacity-50"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══ BARRA DE FILTROS Y ACCIONES ═══════════════════════════════════════ -->
+    <div class="card border-0 shadow-sm mb-3 p-3">
+        <div class="row g-2 align-items-end">
+
+            <!-- Filtro Sucursal -->
+            <div class="col-12 col-md-3">
+                <label class="form-label small fw-semibold mb-1">
+                    <i class="bi bi-geo-alt me-1"></i>Sucursal
+                </label>
+                <select id="filtroSucursal" class="form-select form-select-sm">
+                    <option value="">Todas las sucursales</option>
+                    <option value="Norte">Norte</option>
+                    <option value="Sur">Sur</option>
+                    <option value="Este">Este</option>
+                    <option value="Oeste">Oeste</option>
+                    <option value="Central">Central</option>
+                </select>
+            </div>
+
+            <!-- Filtro Stock -->
+            <div class="col-12 col-md-3">
+                <label class="form-label small fw-semibold mb-1">
+                    <i class="bi bi-funnel me-1"></i>Estado de Stock
+                </label>
+                <select id="filtroAlerta" class="form-select form-select-sm">
+                    <option value="">Todos los productos</option>
+                    <option value="alertas">⚠️ Solo alertas de stock</option>
+                </select>
+            </div>
+
+            <!-- Botón Aplicar Filtros -->
+            <div class="col-auto">
+                <button class="btn btn-primary btn-sm" onclick="aplicarFiltros()">
+                    <i class="bi bi-search me-1"></i>Filtrar
+                </button>
+                <button class="btn btn-outline-secondary btn-sm ms-1" onclick="limpiarFiltros()">
+                    <i class="bi bi-x-circle me-1"></i>Limpiar
+                </button>
+            </div>
+
+            <!-- Acciones principales -->
+            <div class="col-12 col-md-auto ms-md-auto d-flex gap-2 flex-wrap">
+                <button class="btn btn-success btn-sm" onclick="abrirModalCrear()">
+                    <i class="bi bi-plus-circle-fill me-1"></i>Nuevo Producto
+                </button>
+                <button class="btn btn-outline-success btn-sm" onclick="exportarCsv()">
+                    <i class="bi bi-download me-1"></i>Exportar Excel (CSV)
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" onclick="abrirModalCategoria()">
+                    <i class="bi bi-tags me-1"></i>Categorías
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══ TABLA DE PRODUCTOS ════════════════════════════════════════════════ -->
+    <div class="table-container">
+        <div class="p-3 border-bottom d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-bold text-dark">
+                <i class="bi bi-table me-2"></i>Inventario
+                <span class="badge bg-secondary ms-2" id="contadorFilas">0</span>
+            </h6>
+            <div id="loadingSpinner">
+                <div class="spinner-border spinner-border-sm text-primary" role="status">
+                    <span class="visually-hidden">Cargando...</span>
+                </div>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover table-sm mb-0" id="tablaProductos">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>SKU</th>
+                        <th>Nombre</th>
+                        <th>Categoría</th>
+                        <th>Precio</th>
+                        <th>Stock</th>
+                        <th>Mín.</th>
+                        <th>Sucursal</th>
+                        <th>Estado</th>
+                        <th class="text-center">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="cuerpoTabla">
+                    <tr>
+                        <td colspan="10" class="text-center text-muted py-4">
+                            <i class="bi bi-arrow-clockwise me-2"></i>Cargando inventario...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div><!-- /container -->
+
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     MODAL: CREAR / EDITAR PRODUCTO
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="modalProducto" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="tituloModal">
+                    <i class="bi bi-box-seam me-2"></i>Nuevo Producto
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Alerta de errores del backend -->
+                <div id="alertaError" class="alert alert-danger d-none" role="alert"></div>
+
+                <div class="row g-3">
+                    <input type="hidden" id="productoId" />
+
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">SKU <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="inputSku"
+                               placeholder="Ej: LAPIZ-HB-001" maxlength="50" />
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label fw-semibold">Nombre del Producto <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="inputNombre"
+                               placeholder="Ej: Lápiz HB Staedtler x12" maxlength="150" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Precio (S/.) <span class="text-danger">*</span></label>
+                        <input type="number" class="form-control" id="inputPrecio"
+                               placeholder="0.00" min="0.01" step="0.01" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Stock Actual <span class="text-danger">*</span></label>
+                        <input type="number" class="form-control" id="inputStock"
+                               placeholder="0" min="0" step="1" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Stock Mínimo <span class="text-danger">*</span></label>
+                        <input type="number" class="form-control" id="inputStockMinimo"
+                               placeholder="0" min="0" step="1" />
+                        <div class="form-text">Por debajo de este valor se activa la alerta.</div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Sucursal <span class="text-danger">*</span></label>
+                        <select class="form-select" id="inputSucursal">
+                            <option value="">-- Seleccionar --</option>
+                            <option value="Norte">Norte</option>
+                            <option value="Sur">Sur</option>
+                            <option value="Este">Este</option>
+                            <option value="Oeste">Oeste</option>
+                            <option value="Central">Central</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Categoría <span class="text-danger">*</span></label>
+                        <select class="form-select" id="inputCategoria">
+                            <option value="">-- Seleccionar --</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle me-1"></i>Cancelar
+                </button>
+                <button type="button" class="btn btn-primary" onclick="guardarProducto()">
+                    <i class="bi bi-save me-1"></i>Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     MODAL: GESTIÓN DE CATEGORÍAS
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="modalCategoria" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-tags me-2"></i>Gestionar Categorías
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="input-group mb-3">
+                    <input type="text" class="form-control" id="inputNuevaCat"
+                           placeholder="Nueva categoría..." maxlength="100" />
+                    <button class="btn btn-success" onclick="crearCategoria()">
+                        <i class="bi bi-plus-lg"></i> Agregar
+                    </button>
+                </div>
+                <ul class="list-group" id="listaCategorias"></ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     TOAST de confirmación
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 9999">
+    <div id="toastOk" class="toast align-items-center text-bg-success border-0" role="alert">
+        <div class="d-flex">
+            <div class="toast-body fw-semibold" id="toastMensaje">✅ Operación exitosa.</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    </div>
+</div>
+
+<!-- Bootstrap 5 JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<!-- Lógica de la aplicación -->
+<script src="app.js"></script>
+</body>
+</html>
